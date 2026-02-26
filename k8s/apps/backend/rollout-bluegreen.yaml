@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: project-a-backend
+  namespace: project-a
+  labels:
+    app: project-a-backend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: project-a-backend
+  template:
+    metadata:
+      labels:
+        app: project-a-backend
+    spec:
+      containers:
+        - name: backend
+          image: cowmin/project-a-backend:0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+  strategy:
+    blueGreen:
+      activeService: project-a-backend
+      previewService: project-a-backend-preview
+      previewReplicaCount: 1
+      prePromotionAnalysis: {}
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30

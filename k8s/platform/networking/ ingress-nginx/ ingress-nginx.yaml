@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: project-a-ingress
+  namespace: project-a
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - www.unibooker.p-e.kr
+      secretName: unibooker-tls
+  rules:
+    - host: www.unibooker.p-e.kr
+      http:
+        paths:
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: project-a-backend
+                port:
+                  number: 8080
+
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: project-a-backend
+                port:
+                  number: 8080
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: project-a-frontend
+                port:
+                  number: 80

@@ -1,0 +1,66 @@
+- name: kubeadm init on master + generate join command
+  hosts: k8s_master
+  become: true
+  gather_facts: false
+
+  vars:
+    pod_cidr: "100.100.100.0/24"
+    cri_socket: "unix:///run/containerd/containerd.sock"
+    ansible_kube_user: "{{ ansible_user | default('ubuntu') }}"
+    user_home: "/home/{{ ansible_kube_user }}"
+
+  tasks:
+    - name: Check if cluster already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: adminconf
+
+    - name: kubeadm init (only if not initialized)
+      shell: |
+        kubeadm init \
+          --pod-network-cidr={{ pod_cidr }} \
+          --cri-socket={{ cri_socket }}
+      when: not adminconf.stat.exists
+
+    - name: Ensure kubeconfig directory exists for {{ ansible_kube_user }}
+      file:
+        path: "{{ user_home }}/.kube"
+        state: directory
+        owner: "{{ ansible_kube_user }}"
+        group: "{{ ansible_kube_user }}"
+        mode: "0755"
+
+    - name: Copy admin kubeconfig to {{ ansible_kube_user }}
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ user_home }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_kube_user }}"
+        group: "{{ ansible_kube_user }}"
+        mode: "0600"
+
+    - name: Generate join command (token may expire; re-issue without re-init)
+      shell: kubeadm token create --print-join-command
+      register: join_cmd
+      changed_when: false
+
+    - name: Store join command for workers
+      set_fact:
+        kubeadm_join_command: "{{ join_cmd.stdout }}"
+      changed_when: false
+
+
+- name: kubeadm join on workers
+  hosts: k8s_workers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check if worker already joined
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: joined
+
+    - name: Join worker to cluster
+      shell: "{{ hostvars[groups['k8s_master'][0]].kubeadm_join_command }}"
+      when: not joined.stat.exists

@@ -1,0 +1,59 @@
+name: GitOps Backend Tag Update
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  update-gitops:
+    runs-on: ubuntu-22.04-arm
+
+    steps:
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: cowmin/project-a-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: somminn/project-a-gitops
+          path: gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+      
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version 
+
+      - name: Update backend image tag
+        run: |
+          cd gitops/app/backend
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          yq -i '.images[0].newTag = "${{ github.sha }}"' kustomization.yml
+
+          git add kustomization.yml
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "[Chore] Update backend image tag"
+          git push

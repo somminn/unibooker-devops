@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: project-a
+
+resources:
+  - deployment.yaml
+  - service.yaml
+
+images:
+  - name: cowmin/project-a-frontend
+    newTag: "38b5e4602b6616f9741e6670a616265d6793b4ec"
+
+configMapGenerator:
+  - name: frontend-config
+    literals:
+      - VITE_API_BASE_URL=REPLACE_ME
+      - VITE_CLOUDFRONT_URL=REPLACE_ME
+
+generatorOptions:
+  disableNameSuffixHash: true
